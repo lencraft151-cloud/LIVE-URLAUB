@@ -1,0 +1,29 @@
+{
+  "name": "live-urlaub-server",
+  "version": "1.0.0",
+  "description": "RTMP live streaming backend with REST API and live chat for LIVE-URLAUB",
+  "private": true,
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "postinstall": "patch-package",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^13.0.1",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "node-media-server": "^2.7.4",
+    "socket.io": "^4.8.3"
+  },
+  "devDependencies": {
+    "patch-package": "^8.0.1"
+  }
+}

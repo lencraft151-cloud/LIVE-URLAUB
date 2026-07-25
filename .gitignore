@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Env files
+.env
+.env.local
+
+# Server runtime data
+server/data/
+server/media/
+
+# Frontend build output
+web/dist/
+
+# Logs
+npm-debug.log*
+*.log
+
+# OS
+.DS_Store
