@@ -35,7 +35,9 @@ services:
       - "443:443/udp" # HTTP/3
     environment:
       # Eine Domain aktiviert in Caddy automatisch Let's Encrypt inkl. HTTP->HTTPS.
-      SITE_ADDRESS: ${DOMAIN:?DOMAIN muss in der .env gesetzt sein, z.B. stream.example.com}
+      # Wer (noch) keine Domain hat, setzt SITE_ADDRESS=:80 und laeuft vorerst ueber
+      # die reine Server-IP - dann allerdings ohne HTTPS.
+      SITE_ADDRESS: ${SITE_ADDRESS:-${DOMAIN:?Bitte DOMAIN (z.B. stream.example.com) oder SITE_ADDRESS=:80 in der .env setzen}}
     volumes:
       # Zertifikate ueberdauern Neustarts - sonst drohen Let's-Encrypt-Rate-Limits.
       - caddy_data:/data

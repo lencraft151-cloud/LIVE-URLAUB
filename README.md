@@ -226,6 +226,18 @@ docker compose -f docker-compose.deploy.yml up -d
 Ueber `IMAGE_TAG` in der `.env` laesst sich eine bestimmte Version waehlen
 (`latest`, ein Branch-Name oder ein Git-Tag wie `v1.0.0`).
 
+**Noch keine Domain?** Dann statt `DOMAIN` einfach
+
+```ini
+SITE_ADDRESS=:80
+PUBLIC_HOST=<deine-Server-IP>
+```
+
+setzen - die App laeuft dann ueber `http://<Server-IP>` **ohne HTTPS**. Das
+ist zum Ausprobieren in Ordnung; fuer den Dauerbetrieb solltest du eine
+Domain eintragen, damit die Passwoerter nicht unverschluesselt uebertragen
+werden.
+
 ### Sicherheitshinweise fuer den oeffentlichen Betrieb
 
 - **Stream-Key**: RTMP ist unverschluesselt, der Key geht also im Klartext
