@@ -5,12 +5,26 @@ const path = require("path");
 const rootDir = path.resolve(__dirname, "..");
 const nodeEnv = process.env.NODE_ENV || "development";
 
-const jwtSecret = process.env.JWT_SECRET || "dev-insecure-secret-change-me";
-if (nodeEnv === "production" && jwtSecret === "dev-insecure-secret-change-me") {
-  console.warn(
-    "[config] WARNUNG: JWT_SECRET wurde nicht gesetzt. Bitte in der .env eine eigene, " +
-      "zufaellige JWT_SECRET fuer den Produktivbetrieb konfigurieren."
+const DEV_SECRET = "dev-insecure-secret-change-me";
+// Platzhalter aus den mitgelieferten Beispieldateien - die duerfen produktiv nie durchrutschen.
+const PLACEHOLDER_SECRETS = [
+  DEV_SECRET,
+  "change-me-to-a-long-random-string",
+  "please-change-this-secret",
+];
+
+const jwtSecret = process.env.JWT_SECRET || DEV_SECRET;
+
+// Oeffentlich erreichbare Instanz mit bekanntem Secret = jeder kann sich fremde
+// Logins ausstellen. Deshalb hier hart abbrechen statt nur warnen.
+if (nodeEnv === "production" && (PLACEHOLDER_SECRETS.includes(jwtSecret) || jwtSecret.length < 16)) {
+  console.error(
+    "\n[config] FEHLER: Unsicheres JWT_SECRET im Produktivbetrieb.\n" +
+      "Bitte einen eigenen, zufaelligen Wert (mind. 16 Zeichen) setzen, z.B.:\n" +
+      "  openssl rand -hex 32\n" +
+      "und ihn als JWT_SECRET in die .env eintragen.\n"
   );
+  process.exit(1);
 }
 
 module.exports = {

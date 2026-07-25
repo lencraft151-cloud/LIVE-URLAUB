@@ -1,12 +1,12 @@
 import { io } from "socket.io-client";
-import { API_URL } from "./config";
+import { SOCKET_URL } from "./config";
 import { getToken } from "./api";
 
 let socket = null;
 
 export function getSocket() {
   if (!socket) {
-    socket = io(API_URL, {
+    socket = io(SOCKET_URL, {
       autoConnect: false,
       auth: (cb) => cb({ token: getToken() }),
     });

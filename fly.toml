@@ -1,0 +1,66 @@
+# Alternative zum eigenen Server: Deploy auf Fly.io.
+# Fly kann rohes TCP weiterreichen und eignet sich deshalb fuer RTMP (Port 1935) -
+# klassische Static-/Serverless-Hoster (Vercel, Netlify, Cloudflare Pages) koennen das nicht.
+#
+# Voraussetzung: In web/Dockerfile bzw. beim Build gilt weiterhin Single-Origin.
+# Hier laeuft nur der server-Dienst; das Frontend kann als zweite Fly-App oder
+# ueber denselben Caddy-Container davor betrieben werden.
+#
+#   fly launch --no-deploy
+#   fly secrets set JWT_SECRET=$(openssl rand -hex 32)
+#   fly volumes create live_urlaub_data --size 3
+#   fly deploy
+
+app = "live-urlaub"
+primary_region = "fra"
+
+[build]
+  dockerfile = "server/Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  API_PORT = "4000"
+  MEDIA_HTTP_PORT = "8000"
+  RTMP_PORT = "1935"
+  DB_PATH = "/data/app.db"
+  MEDIA_ROOT = "/data/media"
+
+# SQLite und die HLS-Segmente brauchen persistenten Speicher.
+[[mounts]]
+  source = "live_urlaub_data"
+  destination = "/data"
+
+# REST-API + Live-Chat (WebSocket)
+[[services]]
+  internal_port = 4000
+  protocol = "tcp"
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+# HLS-Auslieferung
+[[services]]
+  internal_port = 8000
+  protocol = "tcp"
+
+  [[services.ports]]
+    port = 8443
+    handlers = ["tls", "http"]
+
+# RTMP-Ingest: rohes TCP, kein HTTP-Handler - sonst versteht OBS die Verbindung nicht.
+[[services]]
+  internal_port = 1935
+  protocol = "tcp"
+
+  [[services.ports]]
+    port = 1935
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"

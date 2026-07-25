@@ -1,0 +1,46 @@
+# SITE_ADDRESS steuert, ob mit oder ohne HTTPS ausgeliefert wird:
+#   ":80"                -> lokal / LAN, reines HTTP
+#   "stream.example.com" -> Caddy holt automatisch ein Let's-Encrypt-Zertifikat
+{$SITE_ADDRESS::80} {
+	encode gzip
+
+	# Die HLS-Playlist aendert sich waehrend des Streams alle paar Sekunden und darf
+	# deshalb nirgends zwischengespeichert werden - sonst bleibt das Video haengen.
+	# header_down ueberschreibt den Cache-Header des Backends (ein blosses "header"
+	# reicht hier nicht, der Upstream-Wert wuerde gewinnen).
+	@hlsPlaylist path_regexp ^/live/.*\.m3u8$
+	handle @hlsPlaylist {
+		reverse_proxy {$MEDIA_UPSTREAM:server:8000} {
+			header_down Cache-Control "no-cache, no-store, must-revalidate"
+		}
+	}
+
+	# Videosegmente sind unveraenderlich und duerfen dauerhaft gecacht werden.
+	@hlsSegment path_regexp ^/live/.*\.ts$
+	handle @hlsSegment {
+		reverse_proxy {$MEDIA_UPSTREAM:server:8000} {
+			header_down Cache-Control "public, max-age=31536000, immutable"
+		}
+	}
+
+	handle /live/* {
+		reverse_proxy {$MEDIA_UPSTREAM:server:8000}
+	}
+
+	# REST-API
+	handle /api/* {
+		reverse_proxy {$SERVER_UPSTREAM:server:4000}
+	}
+
+	# Live-Chat. Caddy leitet WebSocket-Upgrades automatisch weiter.
+	handle /socket.io/* {
+		reverse_proxy {$SERVER_UPSTREAM:server:4000}
+	}
+
+	# Single-Page-App: unbekannte Pfade auf index.html, damit /channel/<name> direkt funktioniert.
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

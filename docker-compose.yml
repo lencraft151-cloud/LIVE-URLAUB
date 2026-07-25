@@ -1,17 +1,17 @@
 services:
   server:
     build: ./server
+    # API (4000) und HLS (8000) sind absichtlich NICHT nach aussen veroeffentlicht -
+    # der Reverse Proxy im web-Container liefert beides unter demselben Origin aus.
+    # Nur RTMP braucht einen eigenen Port, weil es kein HTTP-Protokoll ist.
     ports:
-      - "1935:1935" # RTMP-Ingest (OBS/Kamera-App)
-      - "4000:4000" # REST-API + Live-Chat (Socket.io)
-      - "8000:8000" # HLS-Wiedergabe
+      - "1935:1935"
     volumes:
       - server_data:/app/data
       - server_media:/app/media
     environment:
       NODE_ENV: production
-      JWT_SECRET: ${JWT_SECRET:-please-change-this-secret}
-      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET muss in der .env gesetzt sein - z.B. mit "openssl rand -hex 32" erzeugen}
       PUBLIC_HOST: ${PUBLIC_HOST:-localhost}
       CHAT_HISTORY_LIMIT: ${CHAT_HISTORY_LIMIT:-50}
     restart: unless-stopped
@@ -23,7 +23,10 @@ services:
         VITE_API_URL: ${VITE_API_URL:-}
         VITE_MEDIA_URL: ${VITE_MEDIA_URL:-}
     ports:
-      - "5173:80"
+      - "${WEB_PORT:-5173}:80"
+    environment:
+      # ":80" = lokal ohne HTTPS. Fuer eine echte Domain siehe docker-compose.prod.yml.
+      SITE_ADDRESS: ":80"
     depends_on:
       - server
     restart: unless-stopped
