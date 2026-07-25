@@ -93,17 +93,40 @@ RTMP-Adresse anzeigt.
 
 ## Oeffentlich hosten (mit HTTPS)
 
-### Was fuer einen Hoster brauchst du?
+### Warum GitHub Pages hier nicht reicht
 
-Wichtig vorweg: **Vercel, Netlify und Cloudflare Pages funktionieren hier
-nicht.** Diese Dienste koennen nur HTTP/Serverless - die App braucht aber
-einen dauerhaft laufenden Prozess und rohes TCP auf Port 1935 fuer RTMP.
+Das ist die haeufigste Fehlannahme, deshalb vorweg klargestellt:
+**GitHub Pages kann diese App nicht betreiben.** Pages liefert
+ausschliesslich fertige Dateien aus und fuehrt keinen Code auf dem Server
+aus. Es fehlt damit alles, was das Streaming ausmacht:
+
+| Gebraucht wird             | GitHub Pages |
+| -------------------------- | ------------ |
+| Dauerhaft laufender Prozess | nein         |
+| RTMP auf Port 1935 (TCP)   | nein         |
+| WebSocket fuer den Chat     | nein         |
+| Datenbank / Dateispeicher   | nein         |
+| ffmpeg fuer HLS             | nein         |
+
+Dasselbe gilt fuer Vercel, Netlify und Cloudflare Pages: Sie koennen kein
+rohes TCP und damit kein RTMP.
+
+**Was GitHub dagegen sehr gut kann und hier auch uebernimmt:** die Images
+automatisch bauen, testen und in der GitHub Container Registry (GHCR)
+bereitstellen - siehe [Automatischer Build ueber GitHub](#automatischer-build-ueber-github).
+Das Ausfuehren selbst braucht aber einen echten Server.
+
+### Was fuer einen Hoster brauchst du?
 
 Geeignet sind:
 
-- Ein eigener kleiner Server / VPS (Hetzner, DigitalOcean, Netcup, ...) -
-  guenstigste und flexibelste Variante, unten beschrieben
+- Ein eigener kleiner Server / VPS (Hetzner, Netcup, DigitalOcean, ...) -
+  ab ca. 4-5 EUR/Monat, guenstigste und flexibelste Variante
 - [Fly.io](https://fly.io) - kann rohes TCP, siehe `fly.toml`
+- [Oracle Cloud Free Tier](https://www.oracle.com/cloud/free/) - dauerhaft
+  kostenlose VM, reicht fuer kleine Streams
+
+Auf allen dreien laeuft dieselbe Anleitung unten.
 
 Fuer fluessiges Streaming sollte der Server genug Upload-Bandbreite haben:
 Jeder Zuschauer zieht ungefaehr die Bitrate deines Streams (z.B. 3 Mbit/s
@@ -159,6 +182,49 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f
 Zum Aktualisieren spaeter: `git pull`, dann denselben `up -d --build`-Befehl.
 Die Datenbank und die Zertifikate liegen in Docker-Volumes und bleiben
 dabei erhalten.
+
+## Automatischer Build ueber GitHub
+
+Im Repository liegen zwei GitHub-Actions-Workflows:
+
+- **`.github/workflows/ci.yml`** - prueft bei jedem Push und Pull Request,
+  ob das Frontend lintet und baut, ob der Server wirklich startet
+  (Health-Check, Registrierung, RTMP-Port) und ob die Compose-Dateien
+  gueltig sind.
+- **`.github/workflows/docker.yml`** - baut beide Images und veroeffentlicht
+  sie in der GitHub Container Registry:
+  - `ghcr.io/lencraft151-cloud/live-urlaub-server`
+  - `ghcr.io/lencraft151-cloud/live-urlaub-web`
+
+Beides laeuft ohne Einrichtung: Die Workflows nutzen den automatisch
+bereitgestellten `GITHUB_TOKEN`, es sind **keine Secrets zu hinterlegen**.
+
+> Die Pakete sind nach dem ersten erfolgreichen Lauf zunaechst privat. Wer
+> sie ohne Login ziehen koennen moechte, stellt sie einmalig unter
+> *Repository → Packages → Package settings* auf *public*.
+
+### Deploy mit den fertigen Images (ein Befehl)
+
+Damit muss auf dem Server weder gebaut noch der Quellcode ausgecheckt
+werden - es reichen Docker, die Datei `docker-compose.deploy.yml` und eine
+`.env`:
+
+```bash
+# .env mit JWT_SECRET und DOMAIN anlegen (siehe oben), dann:
+docker compose -f docker-compose.deploy.yml pull
+docker compose -f docker-compose.deploy.yml up -d
+```
+
+Aktualisieren geht anschliessend ohne Rebuild - GitHub hat das neue Image
+bereits gebaut:
+
+```bash
+docker compose -f docker-compose.deploy.yml pull
+docker compose -f docker-compose.deploy.yml up -d
+```
+
+Ueber `IMAGE_TAG` in der `.env` laesst sich eine bestimmte Version waehlen
+(`latest`, ein Branch-Name oder ein Git-Tag wie `v1.0.0`).
 
 ### Sicherheitshinweise fuer den oeffentlichen Betrieb
 
@@ -235,9 +301,13 @@ web/
     context/         Auth-Context (Login/Registrierung/Token)
     pages/           Home, Login, Register, Dashboard, Channel
     lib/             API-Client, Socket.io-Client, URL-Konfiguration
-docker-compose.yml       lokales Setup (HTTP)
-docker-compose.prod.yml  Override fuer Domain + automatisches HTTPS
-fly.toml                 Alternative: Deploy auf Fly.io
+docker-compose.yml         lokales Setup (HTTP, baut selbst)
+docker-compose.prod.yml    Override fuer Domain + automatisches HTTPS
+docker-compose.deploy.yml  Deploy mit fertigen Images aus der GHCR
+fly.toml                   Alternative: Deploy auf Fly.io
+.github/workflows/
+  ci.yml                   Lint, Build und Start-Check bei jedem Push
+  docker.yml               baut die Images und pusht sie nach GHCR
 ```
 
 ## Hinweis zum node-media-server-Patch

@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - "claude/**"
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  web:
+    name: Frontend (Lint + Build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - run: npm run lint
+        working-directory: web
+      - run: npm run build
+        working-directory: web
+
+  server:
+    name: Backend (Start + Health-Check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      # ffmpeg wird fuer die RTMP -> HLS-Umwandlung gebraucht.
+      - name: ffmpeg installieren
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+
+      - run: npm ci
+        working-directory: server
+
+      - name: Syntaxpruefung
+        working-directory: server
+        run: find src -name "*.js" -exec node --check {} +
+
+      # Startet den Server wirklich und prueft, dass API, RTMP-Port und
+      # Registrierung funktionieren - ein reiner Syntaxcheck wuerde z.B. einen
+      # kaputten Datenbank- oder Media-Start nicht bemerken.
+      - name: Server starten und pruefen
+        working-directory: server
+        env:
+          NODE_ENV: development
+          JWT_SECRET: ci-test-secret-not-used-in-production
+        run: |
+          node src/index.js > /tmp/server.log 2>&1 &
+          echo $! > /tmp/server.pid
+
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:4000/api/health > /dev/null; then break; fi
+            sleep 1
+          done
+
+          echo "--- Health ---"
+          curl -sf http://localhost:4000/api/health || { echo "Health-Check fehlgeschlagen"; cat /tmp/server.log; exit 1; }
+          echo
+
+          echo "--- Registrierung ---"
+          curl -sf -X POST http://localhost:4000/api/auth/register \
+            -H "Content-Type: application/json" \
+            -d '{"username":"citest","email":"citest@example.com","password":"secret123"}' \
+            > /dev/null || { echo "Registrierung fehlgeschlagen"; cat /tmp/server.log; exit 1; }
+
+          echo "--- Kanalliste ---"
+          curl -sf http://localhost:4000/api/channels | grep -q citest \
+            || { echo "Kanal nicht in der Liste"; cat /tmp/server.log; exit 1; }
+
+          echo "--- RTMP-Port lauscht? ---"
+          timeout 5 bash -c 'until (echo > /dev/tcp/127.0.0.1/1935) 2>/dev/null; do sleep 1; done' \
+            || { echo "RTMP-Port 1935 nicht erreichbar"; cat /tmp/server.log; exit 1; }
+
+          echo "Alle Checks bestanden."
+          kill "$(cat /tmp/server.pid)" 2>/dev/null || true
+
+  compose:
+    name: Docker-Compose-Konfiguration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compose-Dateien validieren
+        env:
+          JWT_SECRET: validation-only-secret-value
+          DOMAIN: stream.example.com
+        run: |
+          docker compose -f docker-compose.yml config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet
+          docker compose -f docker-compose.deploy.yml config --quiet
+          echo "Alle Compose-Dateien sind gueltig."

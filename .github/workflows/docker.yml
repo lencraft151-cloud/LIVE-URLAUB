@@ -1,0 +1,72 @@
+name: Docker Images
+
+# Baut die beiden Images und veroeffentlicht sie in der GitHub Container Registry (GHCR).
+# Damit laesst sich die App auf jedem Server mit einem Befehl starten, ohne dort zu bauen.
+on:
+  push:
+    branches:
+      - main
+      - "claude/**"
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: server
+            context: ./server
+          - component: web
+            context: ./web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Bei GHCR anmelden
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # GHCR akzeptiert nur kleingeschriebene Namen, das Repository heisst aber
+      # "LIVE-URLAUB". Ohne diese Umwandlung schlaegt der Push fehl.
+      - name: Image-Namen kleinschreiben
+        id: image
+        run: |
+          repo=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "name=${REGISTRY}/${repo}-${{ matrix.component }}" >> "$GITHUB_OUTPUT"
+
+      - name: Tags und Labels bestimmen
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=sha,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Bauen und pushen
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -1,0 +1,51 @@
+# Deploy ohne lokalen Build: zieht die von GitHub Actions gebauten Images aus der
+# GitHub Container Registry. Auf dem Server wird weder Quellcode noch Node benoetigt -
+# es reicht Docker plus diese eine Datei und eine .env.
+#
+#   docker compose -f docker-compose.deploy.yml pull
+#   docker compose -f docker-compose.deploy.yml up -d
+#
+# Voraussetzungen:
+#   - DOMAIN und JWT_SECRET in der .env gesetzt
+#   - DNS-A-Record der Domain zeigt auf diesen Server
+#   - Ports 80, 443 und 1935 sind erreichbar
+#
+# IMAGE_TAG waehlt die Version: "latest" (Standard), ein Branch-Name oder ein Git-Tag.
+services:
+  server:
+    image: ghcr.io/${GITHUB_REPO:-lencraft151-cloud/live-urlaub}-server:${IMAGE_TAG:-latest}
+    # Nur RTMP nach aussen. API und HLS erreicht der Browser ueber den Reverse Proxy.
+    ports:
+      - "1935:1935"
+    volumes:
+      - server_data:/app/data
+      - server_media:/app/media
+    environment:
+      NODE_ENV: production
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET muss in der .env gesetzt sein - erzeugen mit "openssl rand -hex 32"}
+      PUBLIC_HOST: ${PUBLIC_HOST:-${DOMAIN}}
+      CHAT_HISTORY_LIMIT: ${CHAT_HISTORY_LIMIT:-50}
+    restart: unless-stopped
+
+  web:
+    image: ghcr.io/${GITHUB_REPO:-lencraft151-cloud/live-urlaub}-web:${IMAGE_TAG:-latest}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    environment:
+      # Eine Domain aktiviert in Caddy automatisch Let's Encrypt inkl. HTTP->HTTPS.
+      SITE_ADDRESS: ${DOMAIN:?DOMAIN muss in der .env gesetzt sein, z.B. stream.example.com}
+    volumes:
+      # Zertifikate ueberdauern Neustarts - sonst drohen Let's-Encrypt-Rate-Limits.
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - server
+    restart: unless-stopped
+
+volumes:
+  server_data:
+  server_media:
+  caddy_data:
+  caddy_config:
