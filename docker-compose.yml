@@ -1,0 +1,33 @@
+services:
+  server:
+    build: ./server
+    ports:
+      - "1935:1935" # RTMP-Ingest (OBS/Kamera-App)
+      - "4000:4000" # REST-API + Live-Chat (Socket.io)
+      - "8000:8000" # HLS-Wiedergabe
+    volumes:
+      - server_data:/app/data
+      - server_media:/app/media
+    environment:
+      NODE_ENV: production
+      JWT_SECRET: ${JWT_SECRET:-please-change-this-secret}
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+      PUBLIC_HOST: ${PUBLIC_HOST:-localhost}
+      CHAT_HISTORY_LIMIT: ${CHAT_HISTORY_LIMIT:-50}
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./web
+      args:
+        VITE_API_URL: ${VITE_API_URL:-}
+        VITE_MEDIA_URL: ${VITE_MEDIA_URL:-}
+    ports:
+      - "5173:80"
+    depends_on:
+      - server
+    restart: unless-stopped
+
+volumes:
+  server_data:
+  server_media:
